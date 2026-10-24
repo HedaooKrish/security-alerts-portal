@@ -3,6 +3,8 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security Alerts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;800&display=swap" rel="stylesheet">
@@ -154,7 +156,20 @@
 </style>
 </head>
 <body>
-<script>var BOOT = <?!= boot ?>;</script>
+<script>
+var BOOT = (function () {
+  var q = new URLSearchParams(location.search);
+  var page = q.get('page');
+  var token = q.get('t') || '';
+  return {
+    api: "https://script.google.com/macros/s/AKfycbwnIn2sPLFUHUITU4iX6WfxCaJC0NTt4HF6HfTirqkXyBAOqjnRhI11cUmqcfeB_nmFKQ/exec",
+    siteName: "Security Alerts",
+    url: location.origin + location.pathname,
+    page: ['confirm', 'manage'].indexOf(page) >= 0 ? page : 'home',
+    token: /^[A-Za-z0-9]{16,80}$/.test(token) ? token : ''
+  };
+})();
+</script>
 
 <header class="top">
   <div class="wrap">
