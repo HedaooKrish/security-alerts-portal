@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security Alerts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f4f6f9;
+    --surface: #ffffff;
+    --ink: #14213d;
+    --muted: #5b6577;
+    --line: #dde2ea;
+    --exploited: #b3261e;
+    --critical: #c2410c;
+    --high: #a16207;
+    --info: #3f5f8f;
+    --action: #14213d;
+    --action-ink: #ffffff;
+    --focus: #2563eb;
+    --tint-exploited: #fbeae8;
+    --tint-action: #eef3fb;
+    --radius: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0e1626;
+      --surface: #16213a;
+      --ink: #e7ecf5;
+      --muted: #9aa6bb;
+      --line: #2a3754;
+      --exploited: #ff8a80;
+      --critical: #fb923c;
+      --high: #facc15;
+      --info: #93b4e6;
+      --action: #e7ecf5;
+      --action-ink: #0e1626;
+      --focus: #93c5fd;
+      --tint-exploited: #3a1b1d;
+      --tint-action: #1d2b4a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--paper); color: var(--ink); }
+  body { font: 400 16px/1.5 "Public Sans", system-ui, sans-serif; }
+  .time, .count { font-variant-numeric: tabular-nums; }
+  a { color: inherit; }
+  a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+    outline: 3px solid var(--focus); outline-offset: 2px;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+  /* header */
+  .top { border-bottom: 1px solid var(--line); background: var(--surface); }
+  .top .wrap { display: flex; align-items: baseline; gap: 16px; padding-top: 14px; padding-bottom: 14px; flex-wrap: wrap; }
+  .brand { font-weight: 800; font-size: 18px; letter-spacing: -0.01em; text-decoration: none; }
+  .tagline { color: var(--muted); font-size: 14px; }
+
+  /* the one loud element: the latest exploited alert, set like an official warning notice */
+  .notice { margin: 28px 0 8px; border-left: 8px solid var(--exploited); background: var(--surface);
+            padding: 20px 24px; border-radius: 0 var(--radius) var(--radius) 0; }
+  .notice.calm { border-left-color: var(--info); }
+  .notice-kicker { color: var(--exploited); font-weight: 600; font-size: 15px; margin: 0 0 6px; }
+  .notice.calm .notice-kicker { color: var(--info); }
+  .notice h1 { font-size: clamp(24px, 3.2vw, 36px); line-height: 1.15; font-weight: 800; letter-spacing: -0.02em;
+               margin: 0 0 10px; max-width: 30ch; }
+  .notice h1 a { text-decoration: none; }
+  .notice h1 a:hover { text-decoration: underline; text-decoration-thickness: 2px; }
+  .notice .meta { color: var(--muted); font-size: 14px; }
+  .notice .todo { margin-top: 12px; max-width: 70ch; }
+
+  /* layout */
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; margin: 24px 0 64px; align-items: start; }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .signup { order: -1; position: static !important; }
+  }
+  h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+
+  /* filters */
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+  .seg button { border: 0; background: none; color: var(--ink); font: inherit; font-size: 14px; padding: 7px 12px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); font-weight: 600; }
+  select, input[type="search"], input[type="email"] {
+    font: inherit; font-size: 15px; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 10px; min-height: 38px;
+  }
+  input[type="search"] { flex: 1 1 180px; }
+  .count { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+
+  /* feed */
+  .day { font-size: 14px; font-weight: 600; color: var(--muted); margin: 24px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .item { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .time { color: var(--muted); font-size: 13px; padding-top: 2px; white-space: nowrap; }
+  @media (max-width: 420px) { .item { grid-template-columns: 58px minmax(0, 1fr); gap: 8px; } .time { font-size: 12px; } }
+  .sev { font-size: 13px; font-weight: 600; margin-right: 8px; white-space: nowrap; }
+  .sev.exploited { color: var(--exploited); }
+  .sev.critical { color: var(--critical); }
+  .sev.high { color: var(--high); }
+  .sev.info { color: var(--info); }
+  .item .title { font-weight: 600; font-size: 16px; line-height: 1.35; text-decoration: none; }
+  .item .title:hover { text-decoration: underline; }
+  .item .src { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
+  details { margin-top: 6px; font-size: 14px; }
+  summary { cursor: pointer; color: var(--muted); }
+  .todo { background: var(--tint-action); border-radius: var(--radius); padding: 10px 12px; font-size: 14px; }
+  .todo ul { margin: 6px 0 0 18px; padding: 0; }
+  .item.exploited { box-shadow: inset 3px 0 0 var(--exploited); padding-left: 10px; margin-left: -10px; }
+  .empty { padding: 32px 0; color: var(--muted); }
+
+  /* sign-up card */
+  .signup { position: sticky; top: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  label.field { display: block; font-weight: 600; font-size: 14px; margin: 14px 0 6px; }
+  .signup input[type="email"] { width: 100%; }
+  fieldset { border: 0; padding: 0; margin: 16px 0 0; }
+  legend { font-weight: 600; font-size: 14px; padding: 0; margin-bottom: 6px; }
+  .check, .radio { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; padding: 4px 0; cursor: pointer; }
+  .check input, .radio input { margin-top: 3px; accent-color: var(--ink); width: 16px; height: 16px; flex: none; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .topic-group { margin-top: 8px; }
+  .topic-group h3 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 10px 0 2px; }
+  .topic-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8px; }
+  @media (max-width: 420px) { .topic-grid { grid-template-columns: 1fr; } }
+  .topics[hidden] { display: none; }
+  .btn { display: inline-block; font: inherit; font-weight: 600; font-size: 15px; border-radius: var(--radius); padding: 10px 18px;
+         border: 1px solid var(--action); background: var(--action); color: var(--action-ink); cursor: pointer; margin-top: 18px; }
+  .btn:disabled { opacity: .6; cursor: progress; }
+  .btn.secondary { background: transparent; color: var(--ink); border-color: var(--line); }
+  .btn.danger { background: transparent; color: var(--exploited); border-color: var(--line); }
+  .status { margin-top: 12px; font-size: 14px; min-height: 1.5em; }
+  .status.ok { color: #15803d; }
+  .status.err { color: var(--exploited); }
+  @media (prefers-color-scheme: dark) { .status.ok { color: #86efac; } }
+  .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+  /* confirm & manage pages */
+  .panel { max-width: 560px; margin: 48px auto 80px; background: var(--surface); border: 1px solid var(--line);
+           border-radius: var(--radius); padding: 28px; }
+  .panel h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .loading { color: var(--muted); padding: 24px 0; }
+  @media (prefers-reduced-motion: no-preference) {
+    .notice { animation: arrive .5s ease-out both; }
+    @keyframes arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  }
+</style>
+</head>
+<body>
+<script>
+var BOOT = (function () {
+  var q = new URLSearchParams(location.search);
+  var page = q.get('page');
+  var token = q.get('t') || '';
+  return {
+    api: "https://script.google.com/macros/s/AKfycbwnIn2sPLFUHUITU4iX6WfxCaJC0NTt4HF6HfTirqkXyBAOqjnRhI11cUmqcfeB_nmFKQ/exec",
+    siteName: "Security Alerts",
+    url: location.origin + location.pathname,
+    page: ['confirm', 'manage'].indexOf(page) >= 0 ? page : 'home',
+    token: /^[A-Za-z0-9]{16,80}$/.test(token) ? token : ''
+  };
+})();
+</script>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" id="brand" href="#"></a>
+    <span class="tagline">Vulnerabilities and attacks from CISA, NVD, GitHub, NCSC Ireland, vendors and security news. Checked every 30 minutes.</span>
+  </div>
+</header>
+
+<main class="wrap" id="app"><p class="loading">Loading…</p></main>
+
+<template id="tpl-home">
+  <section class="notice calm" id="notice" aria-live="polite"></section>
+  <div class="layout">
+    <section aria-labelledby="feed-h">
+      <h2 id="feed-h">Recent alerts</h2>
+      <p class="sub">The last 30 days, newest first. Times are in your time zone.</p>
+      <div class="filters" role="group" aria-label="Filter alerts">
+        <div class="seg" id="seg">
+          <button type="button" data-f="all" aria-pressed="true">All</button>
+          <button type="button" data-f="urgent" aria-pressed="false">Urgent</button>
+          <button type="button" data-f="exploited" aria-pressed="false">Exploited</button>
+        </div>
+        <select id="topic" aria-label="Topic"><option value="">All topics</option></select>
+        <input type="search" id="q" placeholder="Search titles, products or CVEs" aria-label="Search alerts">
+      </div>
+      <p class="count" id="count"></p>
+      <div id="feed"></div>
+    </section>
+
+    <aside class="signup" aria-labelledby="signup-h">
+      <h2 id="signup-h">Get these by email</h2>
+      <p class="sub">One email a day at about 12:00 IST, with anything urgent at the top.</p>
+      <form id="signup-form" novalidate>
+        <label class="field" for="email">Email address</label>
+        <input type="email" id="email" name="email" autocomplete="email" required placeholder="name@example.com">
+        <div class="hp" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div>
+        <div data-choices></div>
+        <button class="btn" type="submit">Subscribe</button>
+        <p class="status" role="status" aria-live="polite"></p>
+      </form>
+    </aside>
+  </div>
+</template>
+
+<template id="tpl-choices">
+  <fieldset>
+    <legend>Topics</legend>
+    <label class="check"><input type="checkbox" name="all" checked><span>Everything<br><span class="hint">Every technology and threat type. Untick to pick specific ones.</span></span></label>
+    <div class="topics" hidden>
+      <div class="topic-group"><h3>Technologies</h3><div class="topic-grid" data-group="technologies"></div></div>
+      <div class="topic-group"><h3>Threat types</h3><div class="topic-grid" data-group="threats"></div></div>
+    </div>
+  </fieldset>
+</template>
+
+<script>
+(function () {
+  'use strict';
+  var app = document.getElementById('app');
+  var brand = document.getElementById('brand');
+  brand.textContent = BOOT.siteName;
+  brand.href = BOOT.url || '#';
+  document.title = BOOT.siteName;
+
+  // ------------------------------------------------------------ helpers
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') n.textContent = attrs[k];
+      else if (k === 'class') n.className = attrs[k];
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  // Talks to the Apps Script backend. Served by Apps Script itself: google.script.run.
+  // Hosted elsewhere (GitHub Pages, BOOT.api set): a POST without cookies, so Google's
+  // multi-account routing never gets involved; if the browser blocks that, JSONP instead.
+  var ACTIONS = { getPortalData: 'portal', subscribe: 'subscribe', confirmSubscription: 'confirm',
+                  getSubscription: 'get', updateSubscription: 'update', unsubscribe: 'unsubscribe' };
+  function payload(fn, args) {
+    if (fn === 'getPortalData') return {};
+    if (fn === 'subscribe') return args[0];
+    if (fn === 'updateSubscription') return { token: args[0], topics: args[1], frequency: args[2] };
+    return { token: args[0] };
+  }
+  function call(fn) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    if (!BOOT.api) {
+      return new Promise(function (resolve, reject) {
+        var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+        runner[fn].apply(runner, args);
+      });
+    }
+    var data = payload(fn, args);
+    var body = JSON.stringify(Object.assign({ action: ACTIONS[fn] }, data));
+    return fetch(BOOT.api, { method: 'POST', body: body, credentials: 'omit', redirect: 'follow',
+                             headers: { 'Content-Type': 'text/plain;charset=utf-8' } })   // "simple" request: no CORS preflight
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .catch(function () { return jsonp(ACTIONS[fn], data); });
+  }
+  function jsonp(action, data) {
+    return new Promise(function (resolve, reject) {
+      var name = '__cb' + Date.now() + Math.floor(Math.random() * 1e6);
+      var script = document.createElement('script');
+      var timer = setTimeout(function () { done(); reject(new Error('the server did not answer')); }, 25000);
+      function done() { clearTimeout(timer); delete window[name]; script.remove(); }
+      window[name] = function (res) { done(); resolve(res); };
+      script.onerror = function () { done(); reject(new Error('could not reach the server')); };
+      script.src = BOOT.api + '?api=' + encodeURIComponent(action) + '&data=' +
+        encodeURIComponent(JSON.stringify(data || {})) + '&callback=' + name;
+      document.head.appendChild(script);
+    });
+  }
+  function safeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : null; }
+  function link(text, href, cls) {
+    var u = safeUrl(href);
+    var a = el(u ? 'a' : 'span', { class: cls || '', text: text });
+    if (u) { a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+    return a;
+  }
+  function when(a) { var d = new Date(a.published || a.received_at); return isNaN(d) ? new Date(a.received_at) : d; }
+  function dayLabel(d) {
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var that = new Date(d); that.setHours(0, 0, 0, 0);
+    var diff = Math.round((today - that) / 864e5);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  function hhmm(d) {
+    // date-only sources (CISA KEV) arrive as midnight UTC; don't invent a time for them
+    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0) return '';
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  function ago(d) {
+    var m = Math.round((Date.now() - d) / 6e4);
+    if (m < 60) return m <= 1 ? 'just now' : m + ' minutes ago';
+    var h = Math.round(m / 60);
+    if (h < 48) return h + (h === 1 ? ' hour ago' : ' hours ago');
+    return Math.round(h / 24) + ' days ago';
+  }
+  function sevInfo(a) {
+    if (a.exploited) return { cls: 'exploited', text: 'Exploited' };
+    var s = a.score ? ' ' + Number(a.score).toFixed(1) : '';
+    if (a.severity === 'critical') return { cls: 'critical', text: 'Critical' + s };
+    if (a.severity === 'high') return { cls: 'high', text: 'High' + s };
+    return { cls: 'info', text: a.priority === 'urgent' ? 'Urgent' : 'News & advisories' };
+  }
+  function todoBox(a) {
+    if (!a.action && !(a.remediation || []).length) return null;
+    var box = el('div', { class: 'todo' }, [el('strong', { text: 'What to do: ' }), a.action || '']);
+    if ((a.remediation || []).length) {
+      box.appendChild(el('ul', {}, a.remediation.slice(0, 4).map(function (r) { return el('li', { text: r }); })));
+    }
+    return box;
+  }
+  function setStatus(node, ok, msg) { node.className = 'status ' + (ok ? 'ok' : 'err'); node.textContent = msg; }
+  function errorText(err) { return 'Something went wrong (' + (err && err.message ? err.message : err) + '). Try again.'; }
+
+  // ------------------------------------------------------------ topic picker (shared)
+  function buildChoices(host, topics, selected, frequency) {
+    host.appendChild(document.getElementById('tpl-choices').content.cloneNode(true));
+    var all = host.querySelector('input[name="all"]');
+    var box = host.querySelector('.topics');
+    ['technologies', 'threats'].forEach(function (g) {
+      var grid = host.querySelector('[data-group="' + g + '"]');
+      (topics[g] || []).forEach(function (t) {
+        var input = el('input', { type: 'checkbox', name: 'topic', value: t });
+        if (selected.indexOf(t) >= 0) input.checked = true;
+        grid.appendChild(el('label', { class: 'check' }, [input, el('span', { text: t })]));
+      });
+    });
+    var everything = !selected.length || selected.indexOf('ALL') >= 0;
+    all.checked = everything;
+    box.hidden = everything;
+    all.addEventListener('change', function () { box.hidden = all.checked; });
+    return function read() {
+      var chosen = all.checked ? ['ALL'] : Array.prototype.map.call(
+        host.querySelectorAll('input[name="topic"]:checked'), function (i) { return i.value; });
+      return { topics: chosen, frequency: 'digest' };   // everyone gets one daily email
+    };
+  }
+
+  // ------------------------------------------------------------ home page
+  function home() {
+    app.innerHTML = '';
+    app.appendChild(document.getElementById('tpl-home').content.cloneNode(true));
+    var state = { alerts: [], filter: 'all', topic: '', q: '' };
+    var feed = document.getElementById('feed');
+    var count = document.getElementById('count');
+    var notice = document.getElementById('notice');
+    var form = document.getElementById('signup-form');
+    var status = form.querySelector('.status');
+    var readChoices = null;
+    notice.appendChild(el('p', { class: 'notice-kicker', text: 'Loading the latest alerts…' }));
+
+    function render() {
+      var q = state.q.toLowerCase();
+      var list = state.alerts.filter(function (a) {
+        if (state.filter === 'urgent' && a.priority !== 'urgent') return false;
+        if (state.filter === 'exploited' && !a.exploited) return false;
+        if (state.topic && a.technologies.concat(a.threat_types).indexOf(state.topic) < 0) return false;
+        if (q && (a.title + ' ' + (a.cves || []).join(' ') + ' ' + a.source + ' ' + (a.summary || '')).toLowerCase().indexOf(q) < 0) return false;
+        return true;
+      });
+      feed.innerHTML = '';
+      count.textContent = list.length + (list.length === 1 ? ' alert' : ' alerts');
+      if (!list.length) {
+        feed.appendChild(el('p', { class: 'empty', text: state.alerts.length
+          ? 'No alerts match these filters. Clear the search or choose another topic.'
+          : 'No alerts yet. They appear here after the monitor\'s next run, within 30 minutes.' }));
+        return;
+      }
+      var lastDay = '';
+      list.forEach(function (a) {
+        var d = when(a);
+        var day = dayLabel(d);
+        if (day !== lastDay) { feed.appendChild(el('h3', { class: 'day', text: day })); lastDay = day; }
+        var sev = sevInfo(a);
+        var body = el('div', {}, [
+          el('div', {}, [el('span', { class: 'sev ' + sev.cls, text: sev.text }), link(a.title, a.url, 'title')]),
+          el('div', { class: 'src', text: a.source + ((a.cves || []).length ? ' · ' + a.cves.slice(0, 3).join(', ') : '') })
+        ]);
+        var tags = a.technologies.concat(a.threat_types.filter(function (t) { return t !== 'Actively exploited'; }));
+        if (tags.length) body.appendChild(el('div', { class: 'tags' }, tags.map(function (t) { return el('span', { class: 'tag', text: t }); })));
+        var todo = todoBox(a);
+        if (todo) body.appendChild(el('details', {}, [el('summary', { text: 'What to do' }), todo]));
+        feed.appendChild(el('article', { class: 'item' + (a.exploited ? ' exploited' : '') }, [
+          el('div', { class: 'time', text: hhmm(d) }), body
+        ]));
+      });
+    }
+
+    function renderNotice() {
+      notice.innerHTML = '';
+      var top = state.alerts.filter(function (a) { return a.exploited; })[0];
+      if (!top) {
+        notice.className = 'notice calm';
+        notice.appendChild(el('p', { class: 'notice-kicker', text: 'No exploited vulnerabilities in the last 30 days' }));
+        notice.appendChild(el('h1', { text: state.alerts.length ? 'Nothing is being actively attacked right now.' : 'Waiting for the first alerts.' }));
+        return;
+      }
+      var d = when(top);
+      notice.className = 'notice';
+      notice.appendChild(el('p', { class: 'notice-kicker', text: 'Latest actively exploited vulnerability · ' + ago(d) }));
+      notice.appendChild(el('h1', {}, [link(top.title, top.url)]));
+      notice.appendChild(el('div', { class: 'meta', text: top.source + ((top.cves || []).length ? ' · ' + top.cves.join(', ') : '') +
+        (top.technologies.length ? ' · ' + top.technologies.join(', ') : '') }));
+      var todo = todoBox(top);
+      if (todo) notice.appendChild(el('div', { class: 'todo' }, Array.prototype.slice.call(todo.childNodes)));
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('#seg button'), function (b) {
+      b.addEventListener('click', function () {
+        state.filter = b.getAttribute('data-f');
+        Array.prototype.forEach.call(document.querySelectorAll('#seg button'), function (x) {
+          x.setAttribute('aria-pressed', String(x === b));
+        });
+        render();
+      });
+    });
+    document.getElementById('topic').addEventListener('change', function (e) { state.topic = e.target.value; render(); });
+    document.getElementById('q').addEventListener('input', function (e) { state.q = e.target.value; render(); });
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = form.email.value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setStatus(status, false, 'Enter a valid email address, like name@example.com.'); form.email.focus(); return; }
+      var c = readChoices();
+      if (!c.topics.length) { setStatus(status, false, 'Choose at least one topic, or tick "Everything".'); return; }
+      var btn = form.querySelector('button[type="submit"]');
+      btn.disabled = true; btn.textContent = 'Subscribing…';
+      call('subscribe', { email: email, topics: c.topics, frequency: c.frequency, website: form.website.value })
+        .then(function (res) {
+          setStatus(status, res.ok, res.message);
+          if (res.ok) form.email.value = '';
+        })
+        .catch(function (err) { setStatus(status, false, errorText(err)); })
+        .then(function () { btn.disabled = false; btn.textContent = 'Subscribe'; });
+    });
+
+    call('getPortalData').then(function (data) {
+      state.alerts = (data.alerts || []).map(function (a) {
+        a.technologies = a.technologies || []; a.threat_types = a.threat_types || []; return a;
+      });
+      var sel = document.getElementById('topic');
+      [['Technologies', data.topics.technologies], ['Threat types', data.topics.threats]].forEach(function (g) {
+        var og = el('optgroup', { label: g[0] });
+        (g[1] || []).forEach(function (t) { og.appendChild(el('option', { value: t, text: t })); });
+        sel.appendChild(og);
+      });
+      readChoices = buildChoices(form.querySelector('[data-choices]'), data.topics, [], 'both');
+      renderNotice();
+      render();
+    }).catch(function (err) {
+      notice.innerHTML = '';
+      notice.appendChild(el('p', { class: 'notice-kicker', text: errorText(err) }));
+    });
+  }
+
+  // ------------------------------------------------------------ confirm page
+  function confirmPage() {
+    app.innerHTML = '';
+    var status = el('p', { class: 'status', role: 'status', 'aria-live': 'polite' });
+    var btn = el('button', { class: 'btn', type: 'button', text: 'Confirm subscription' });
+    var panel = el('section', { class: 'panel' }, [
+      el('h1', { text: 'Confirm your subscription' }),
+      el('p', { text: 'Confirm to start getting security alerts by email. You can change topics or unsubscribe at any time from the link in every email.' }),
+      btn, status
+    ]);
+    app.appendChild(panel);
+    btn.addEventListener('click', function () {
+      btn.disabled = true; btn.textContent = 'Confirming…';
+      call('confirmSubscription', BOOT.token).then(function (res) {
+        setStatus(status, res.ok, res.message);
+        if (res.ok) {
+          btn.remove();
+          panel.querySelector('h1').textContent = 'Subscription confirmed';
+          var manage = el('a', { class: 'btn secondary', text: 'Choose your topics', href: BOOT.url + '?page=manage&t=' + res.token });
+          panel.appendChild(el('div', { class: 'row' }, [manage, link('See recent alerts', BOOT.url, 'btn secondary')]));
+        } else { btn.disabled = false; btn.textContent = 'Confirm subscription'; }
+      }).catch(function (err) { setStatus(status, false, errorText(err)); btn.disabled = false; btn.textContent = 'Confirm subscription'; });
+    });
+  }
+
+  // ------------------------------------------------------------ manage page
+  function managePage() {
+    app.innerHTML = '';
+    var panel = el('section', { class: 'panel' }, [el('p', { class: 'loading', text: 'Loading your subscription…' })]);
+    app.appendChild(panel);
+    call('getSubscription', BOOT.token).then(function (sub) {
+      panel.innerHTML = '';
+      if (!sub.ok) {
+        panel.appendChild(el('h1', { text: 'Link not valid' }));
+        panel.appendChild(el('p', { text: sub.message + ' Use the link from your most recent alert email.' }));
+        return;
+      }
+      var status = el('p', { class: 'status', role: 'status', 'aria-live': 'polite' });
+      var intro = sub.status === 'unsubscribed'
+        ? 'You are unsubscribed. Choose your topics and save to start getting emails again.'
+        : sub.status === 'pending' ? 'Your subscription is waiting for confirmation. Use the link in the confirmation email.'
+        : 'Choose what you get. Changes apply from the next email.';
+      var choices = el('div');
+      var save = el('button', { class: 'btn', type: 'button', text: sub.status === 'unsubscribed' ? 'Subscribe again' : 'Save changes' });
+      var unsub = el('button', { class: 'btn danger', type: 'button', text: 'Unsubscribe' });
+      var row = el('div', { class: 'row' }, [save]);
+      if (sub.status === 'active') row.appendChild(unsub);
+      panel.appendChild(el('h1', { text: 'Your subscription' }));
+      panel.appendChild(el('p', { class: 'sub', text: sub.email }));
+      panel.appendChild(el('p', { text: intro }));
+      panel.appendChild(choices);
+      panel.appendChild(row);
+      panel.appendChild(status);
+      var read = buildChoices(choices, sub.allTopics, sub.topics, sub.frequency);
+
+      save.addEventListener('click', function () {
+        var c = read();
+        if (!c.topics.length) { setStatus(status, false, 'Choose at least one topic, or tick "Everything".'); return; }
+        save.disabled = true;
+        call('updateSubscription', BOOT.token, c.topics, c.frequency).then(function (res) {
+          setStatus(status, res.ok, res.message);
+          if (res.ok && !row.contains(unsub)) { row.appendChild(unsub); save.textContent = 'Save changes'; }
+        }).catch(function (err) { setStatus(status, false, errorText(err)); })
+          .then(function () { save.disabled = false; });
+      });
+      unsub.addEventListener('click', function () {
+        unsub.disabled = true;
+        call('unsubscribe', BOOT.token).then(function (res) {
+          setStatus(status, res.ok, res.message);
+          if (res.ok) { unsub.remove(); save.textContent = 'Subscribe again'; }
+        }).catch(function (err) { setStatus(status, false, errorText(err)); })
+          .then(function () { unsub.disabled = false; });
+      });
+    }).catch(function (err) {
+      panel.innerHTML = '';
+      panel.appendChild(el('p', { class: 'status err', text: errorText(err) }));
+    });
+  }
+
+  if (BOOT.page === 'confirm') confirmPage();
+  else if (BOOT.page === 'manage') managePage();
+  else home();
+})();
+</script>
+</body>
+</html>
