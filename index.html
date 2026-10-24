@@ -3,8 +3,6 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Security Alerts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;800&display=swap" rel="stylesheet">
@@ -98,7 +96,8 @@
   /* feed */
   .day { font-size: 14px; font-weight: 600; color: var(--muted); margin: 24px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .item { display: grid; grid-template-columns: 68px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-  .time { color: var(--muted); font-size: 13px; padding-top: 2px; white-space: nowrap; }
+  .time { color: var(--muted); font-size: 13px; padding-top: 2px; white-space: nowrap; line-height: 1.35; }
+  .time .date { display: block; color: var(--ink); font-weight: 600; }
   @media (max-width: 420px) { .item { grid-template-columns: 58px minmax(0, 1fr); gap: 8px; } .time { font-size: 12px; } }
   .sev { font-size: 13px; font-weight: 600; margin-right: 8px; white-space: nowrap; }
   .sev.exploited { color: var(--exploited); }
@@ -155,20 +154,7 @@
 </style>
 </head>
 <body>
-<script>
-var BOOT = (function () {
-  var q = new URLSearchParams(location.search);
-  var page = q.get('page');
-  var token = q.get('t') || '';
-  return {
-    api: "https://script.google.com/macros/s/AKfycbwnIn2sPLFUHUITU4iX6WfxCaJC0NTt4HF6HfTirqkXyBAOqjnRhI11cUmqcfeB_nmFKQ/exec",
-    siteName: "Security Alerts",
-    url: location.origin + location.pathname,
-    page: ['confirm', 'manage'].indexOf(page) >= 0 ? page : 'home',
-    token: /^[A-Za-z0-9]{16,80}$/.test(token) ? token : ''
-  };
-})();
-</script>
+<script>var BOOT = <?!= boot ?>;</script>
 
 <header class="top">
   <div class="wrap">
@@ -192,6 +178,13 @@ var BOOT = (function () {
           <button type="button" data-f="exploited" aria-pressed="false">Exploited</button>
         </div>
         <select id="topic" aria-label="Topic"><option value="">All topics</option></select>
+        <select id="range" aria-label="Date">
+          <option value="">All dates</option>
+          <option value="0">Today</option>
+          <option value="1">Yesterday</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+        </select>
         <input type="search" id="q" placeholder="Search titles, products or CVEs" aria-label="Search alerts">
       </div>
       <p class="count" id="count"></p>
@@ -291,13 +284,23 @@ var BOOT = (function () {
     return a;
   }
   function when(a) { var d = new Date(a.published || a.received_at); return isNaN(d) ? new Date(a.received_at) : d; }
-  function dayLabel(d) {
+  // Whole days between d and today, in the viewer's time zone (0 = today, 1 = yesterday).
+  function daysAgo(d) {
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var that = new Date(d); that.setHours(0, 0, 0, 0);
-    var diff = Math.round((today - that) / 864e5);
-    if (diff === 0) return 'Today';
-    if (diff === 1) return 'Yesterday';
-    return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    return Math.round((today - that) / 864e5);
+  }
+  function dateShort(d) {   // "24 Oct", with the year if it isn't this year
+    var opts = { day: 'numeric', month: 'short' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    return d.toLocaleDateString(undefined, opts);
+  }
+  function dayLabel(d) {
+    var full = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    var diff = daysAgo(d);
+    if (diff === 0) return 'Today · ' + full;
+    if (diff === 1) return 'Yesterday · ' + full;
+    return full;
   }
   function hhmm(d) {
     // date-only sources (CISA KEV) arrive as midnight UTC; don't invent a time for them
@@ -357,7 +360,7 @@ var BOOT = (function () {
   function home() {
     app.innerHTML = '';
     app.appendChild(document.getElementById('tpl-home').content.cloneNode(true));
-    var state = { alerts: [], filter: 'all', topic: '', q: '' };
+    var state = { alerts: [], filter: 'all', topic: '', range: '', q: '' };
     var feed = document.getElementById('feed');
     var count = document.getElementById('count');
     var notice = document.getElementById('notice');
@@ -372,6 +375,10 @@ var BOOT = (function () {
         if (state.filter === 'urgent' && a.priority !== 'urgent') return false;
         if (state.filter === 'exploited' && !a.exploited) return false;
         if (state.topic && a.technologies.concat(a.threat_types).indexOf(state.topic) < 0) return false;
+        if (state.range !== '') {
+          var n = daysAgo(when(a)), r = Number(state.range);
+          if (r <= 1 ? n !== r : n >= r) return false;     // Today / Yesterday exactly; "last N days" includes today
+        }
         if (q && (a.title + ' ' + (a.cves || []).join(' ') + ' ' + a.source + ' ' + (a.summary || '')).toLowerCase().indexOf(q) < 0) return false;
         return true;
       });
@@ -398,7 +405,7 @@ var BOOT = (function () {
         var todo = todoBox(a);
         if (todo) body.appendChild(el('details', {}, [el('summary', { text: 'What to do' }), todo]));
         feed.appendChild(el('article', { class: 'item' + (a.exploited ? ' exploited' : '') }, [
-          el('div', { class: 'time', text: hhmm(d) }), body
+          el('div', { class: 'time' }, [el('span', { class: 'date', text: dateShort(d) }), document.createTextNode(hhmm(d))]), body
         ]));
       });
     }
@@ -432,6 +439,7 @@ var BOOT = (function () {
       });
     });
     document.getElementById('topic').addEventListener('change', function (e) { state.topic = e.target.value; render(); });
+    document.getElementById('range').addEventListener('change', function (e) { state.range = e.target.value; render(); });
     document.getElementById('q').addEventListener('input', function (e) { state.q = e.target.value; render(); });
 
     form.addEventListener('submit', function (e) {
@@ -486,7 +494,7 @@ var BOOT = (function () {
           btn.remove();
           status.remove();
           panel.querySelector('h1').textContent = 'Subscription confirmed';
-          intro.textContent = (/first report/.test(res.message) ? 'Your first report is on its way. ' : '') +
+          intro.textContent = (/first report/.test(res.message) ? 'Your first report is on its way and should arrive within a few minutes (check your spam folder if you don\'t see it). ' : '') +
             'After that, you will get one email a day at about 12:00 IST. Every email has a link to change your topics or unsubscribe.';
         } else {
           setStatus(status, false, res.message);
