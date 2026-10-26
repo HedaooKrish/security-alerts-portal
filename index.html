@@ -151,6 +151,8 @@
   .pill::after { content: "×"; margin-left: 6px; padding: 0 4px; color: var(--muted); }
   .linkish { font: inherit; font-size: 13px; background: none; border: 0; color: var(--focus); cursor: pointer; text-decoration: underline; padding: 2px 4px; }
   .count { color: var(--muted); font-size: 13px; margin: 6px 0 0; font-variant-numeric: tabular-nums; }
+  .count-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .count-row .linkish { font-size: 13px; }
 
   /* feed: compact rows, details on demand */
   .day { font-size: 13px; font-weight: 600; color: var(--muted); margin: 18px 0 0; padding: 6px 0; border-bottom: 1px solid var(--line); }
@@ -285,7 +287,10 @@ var BOOT = (function () {
           </select>
         </div>
         <div class="active" id="active" hidden></div>
-        <p class="count" id="count" aria-live="polite"></p>
+        <div class="count-row">
+          <p class="count" id="count" aria-live="polite"></p>
+          <button type="button" class="linkish" id="csv" title="Download the alerts shown, with the current filters">Download CSV</button>
+        </div>
       </div>
       <div id="feed"></div>
       <button type="button" class="btn secondary show-more" id="show-more" hidden></button>
@@ -687,18 +692,47 @@ var BOOT = (function () {
       ]);
     }
 
-    function render() {
-      renderControls();
-      renderNotice();
-      var f = state.f;
+    function currentList() {
       var list = state.alerts.filter(function (a) { return passes(a); });
-      if (f.sort === 'serious') {
+      if (state.f.sort === 'serious') {
         list.sort(function (a, b) {
           return (SEV_RANK[sevKey(b)] - SEV_RANK[sevKey(a)]) || ((b.score || 0) - (a.score || 0)) || (when(b) - when(a));
         });
       }
+      return list;
+    }
+
+    // CSV of everything the current filters show (not just the 50 on screen). Opens in Excel / Google Sheets.
+    function downloadCsv() {
+      var cell = function (v) {
+        var s = String(v === null || v === undefined ? '' : v).replace(/\s+/g, ' ').trim();
+        if (/^[=+\-@]/.test(s)) s = "'" + s;            // stop spreadsheets treating text as a formula
+        return '"' + s.replace(/"/g, '""') + '"';
+      };
+      var rows = [['Date (UTC)', 'Severity', 'Score', 'Exploited', 'Title', 'CVEs', 'Source', 'Our stack', 'Technologies',
+                   'Threat types', 'What to do', 'Link']];
+      currentList().forEach(function (a) {
+        var d = when(a);
+        rows.push([d.toISOString().slice(0, 16).replace('T', ' '), a.severity || '', a.score || '', a.exploited ? 'Yes' : 'No',
+                   a.title, (a.cves || []).join(' '), a.source, (a.stack || []).join('; '), a.technologies.join('; '),
+                   a.threat_types.join('; '), [a.action].concat(a.remediation || []).filter(String).join(' '), a.url]);
+      });
+      var csv = '\ufeff' + rows.map(function (r) { return r.map(cell).join(','); }).join('\r\n');   // BOM: Excel reads UTF-8
+      var link = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })),
+                           download: 'security-alerts-' + new Date().toISOString().slice(0, 10) + '.csv' });
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
+    }
+
+    function render() {
+      renderControls();
+      renderNotice();
+      var f = state.f;
+      var list = currentList();
       feed.innerHTML = '';
       var shown = list.slice(0, state.limit);
+      $('csv').hidden = !list.length;
       count.textContent = list.length ? (shown.length < list.length ? 'Showing ' + shown.length + ' of ' : '') +
         list.length + (list.length === 1 ? ' alert' : ' alerts') : '';
       var more = $('show-more');
@@ -793,6 +827,7 @@ var BOOT = (function () {
       typing = setTimeout(function () { update({ q: e.target.value }); }, 150);
     });
     $('show-more').addEventListener('click', function () { state.limit += PAGE; render(); });
+    $('csv').addEventListener('click', downloadCsv);
     $('toggle-filters').addEventListener('click', function () {
       var panel = $('filter-panel'), open = panel.getAttribute('data-open') !== 'true';
       panel.setAttribute('data-open', String(open));
