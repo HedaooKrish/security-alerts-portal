@@ -82,6 +82,18 @@
   h2 { font-size: 20px; font-weight: 800; letter-spacing: -0.01em; margin: 0 0 4px; }
   .sub { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
 
+  /* scope switch: our stack (default) or every alert collected */
+  .scope { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+           padding: 3px; margin: 0 0 12px; gap: 2px; }
+  .scope button { font: inherit; font-size: 14px; border: 0; background: none; color: var(--muted); border-radius: 999px;
+                  padding: 6px 14px; cursor: pointer; white-space: nowrap; }
+  .scope button[aria-pressed="true"] { background: var(--ink); color: var(--paper); font-weight: 600; }
+  .scope .n { font-size: 12px; opacity: .75; margin-left: 4px; font-variant-numeric: tabular-nums; }
+  .scope-note { font-size: 13px; color: var(--muted); margin: -4px 0 14px; }
+  .scope-note summary { display: inline; cursor: pointer; color: var(--focus); }
+  .scope-note p { margin: 6px 0 0; }
+  .stack-tag { font-size: 12px; color: var(--ink); background: var(--tint-action); border-radius: 999px; padding: 1px 8px; }
+
   /* summary strip: last 7 days at a glance, each number is a shortcut filter */
   .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0 0 16px; }
   .stat { font: inherit; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
@@ -246,6 +258,8 @@ var BOOT = (function () {
     <section aria-labelledby="feed-h">
       <h2 id="feed-h">Recent alerts</h2>
       <p class="sub">The last 30 days. Times are in your time zone.</p>
+      <div class="scope" id="scope" role="group" aria-label="Which alerts" hidden></div>
+      <div class="scope-note" id="scope-note" hidden></div>
       <div class="summary" id="summary" aria-label="Last 7 days"></div>
       <div class="tabs" role="tablist" id="views" aria-label="Kind of alert"></div>
       <div class="filterbar" id="filterbar">
@@ -279,7 +293,7 @@ var BOOT = (function () {
 
     <aside class="signup" aria-labelledby="signup-h">
       <h2 id="signup-h">Get these by email</h2>
-      <p class="sub">One email a day at about 12:00 IST, with anything urgent at the top.</p>
+      <p class="sub">One email a day at about 12:00 IST about our technology stack, with anything urgent at the top.</p>
       <form id="signup-form" novalidate>
         <label class="field" for="email">Email address</label>
         <input type="email" id="email" name="email" autocomplete="email" required placeholder="name@example.com">
@@ -470,7 +484,7 @@ var BOOT = (function () {
   ];
   var SEVS = [['exploited', 'Exploited'], ['critical', 'Critical'], ['high', 'High'], ['other', 'Other']];
   var PAGE = 50;
-  var DEFAULTS = { view: 'all', sev: [], tech: [], threat: [], src: '', days: '', sort: 'new', q: '' };
+  var DEFAULTS = { scope: 'ours', view: 'all', sev: [], tech: [], threat: [], src: '', days: '', sort: 'new', q: '' };
 
   // Filters live in the page address (?view=vuln&tech=Linux…) so a view can be bookmarked or shared;
   // the browser also remembers the last one used.
@@ -484,7 +498,7 @@ var BOOT = (function () {
         f[k] = Array.isArray(DEFAULTS[k]) ? params.get(k).split(',').filter(String) : params.get(k);
       });
     } else {
-      try { var saved = JSON.parse(localStorage.getItem('alertFilters2') || 'null'); if (saved) Object.assign(f, saved); } catch (e) {}
+      try { var saved = JSON.parse(localStorage.getItem('alertFilters3') || 'null'); if (saved) Object.assign(f, saved); } catch (e) {}
     }
     if (!VIEWS.some(function (v) { return v.id === f.view; })) f.view = DEFAULTS.view;
     return f;
@@ -497,7 +511,7 @@ var BOOT = (function () {
     });
     var qs = params.toString();
     try { history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash); } catch (e) {}
-    try { localStorage.setItem('alertFilters2', JSON.stringify(f)); } catch (e) {}
+    try { localStorage.setItem('alertFilters3', JSON.stringify(f)); } catch (e) {}
   }
 
   // ------------------------------------------------------------ home page
@@ -515,6 +529,7 @@ var BOOT = (function () {
     // Every filter except the one named in `skip` (used for the counts shown on tabs and chips).
     function passes(a, skip) {
       var f = state.f;
+      if (skip !== 'scope' && f.scope === 'ours' && state.hasStack && !a.stack.length) return false;
       if (skip !== 'view' && !VIEWS.filter(function (v) { return v.id === f.view; })[0].test(a)) return false;
       if (skip !== 'sev' && f.sev.length && f.sev.indexOf(sevKey(a)) < 0) return false;
       if (f.tech.length && !f.tech.some(function (t) { return a.technologies.indexOf(t) >= 0; })) return false;
@@ -542,7 +557,7 @@ var BOOT = (function () {
 
     function renderSummary() {
       var box = $('summary'); box.innerHTML = '';
-      var week = state.alerts.filter(function (a) { return daysAgo(when(a)) < 7; });
+      var week = inScope().filter(function (a) { return daysAgo(when(a)) < 7; });
       [['exploited', 'Exploited', function (a) { return a.exploited; }, { view: 'all', sev: ['exploited'] }],
        ['critical', 'Critical', function (a) { return sevKey(a) === 'critical'; }, { view: 'all', sev: ['critical'] }],
        ['high', 'High', function (a) { return sevKey(a) === 'high'; }, { view: 'all', sev: ['high'] }],
@@ -557,8 +572,37 @@ var BOOT = (function () {
       });
     }
 
+    function inScope() {
+      return state.f.scope === 'ours' && state.hasStack ? state.alerts.filter(function (a) { return a.stack.length; }) : state.alerts;
+    }
+
+    function renderScope() {
+      var box = $('scope'), note = $('scope-note');
+      box.hidden = note.hidden = !state.hasStack;
+      if (!state.hasStack) return;
+      box.innerHTML = '';
+      [['ours', 'Our stack', state.alerts.filter(function (a) { return a.stack.length; }).length],
+       ['all', 'All updates', state.alerts.length]].forEach(function (o) {
+        var b = el('button', { type: 'button', 'aria-pressed': String(state.f.scope === o[0]) },
+                   [o[1], el('span', { class: 'n', text: String(o[2]) })]);
+        b.addEventListener('click', function () { update({ scope: o[0] }); });
+        box.appendChild(b);
+      });
+      note.innerHTML = '';
+      if (state.f.scope === 'ours') {
+        var list = el('details', {}, [el('summary', { text: 'Which technologies?' }),
+          el('p', { text: state.stackNames.join(', ') + '. Also: attacks on the education sector, and ransomware and phishing campaigns.' })]);
+        note.appendChild(document.createTextNode('Alerts about the technologies we use. '));
+        note.appendChild(list);
+      } else {
+        note.appendChild(document.createTextNode('Every alert collected worldwide, including products we don\'t use.'));
+      }
+    }
+
     function renderControls() {
       var f = state.f;
+      renderScope();
+      renderSummary();
       // tabs, with how many alerts each would show
       var tabs = $('views'); tabs.innerHTML = '';
       VIEWS.forEach(function (v) {
@@ -613,7 +657,7 @@ var BOOT = (function () {
 
     function row(a) {
       var d = when(a), sev = sevInfo(a), id = a.id || a.url;
-      var main = a.technologies[0] || a.threat_types.filter(function (t) { return t !== 'Actively exploited'; })[0] || '';
+      var main = (a.stack || [])[0] || a.technologies[0] || a.threat_types.filter(function (t) { return t !== 'Actively exploited'; })[0] || '';
       var meta = [a.source, main, (a.cves || []).slice(0, 2).join(', ')].filter(String).join(' · ');
       var title = link(a.title, a.url, 'title'); title.title = a.title;
       var btn = el('button', { type: 'button', class: 'more-btn', 'aria-expanded': String(!!state.open[id]), text: state.open[id] ? 'Less' : 'Details' });
@@ -622,6 +666,7 @@ var BOOT = (function () {
       if (a.summary) detail.appendChild(el('p', { text: a.summary }));
       var tags = a.technologies.concat(a.threat_types.filter(function (t) { return t !== 'Actively exploited'; }));
       if ((a.cves || []).length > 2) tags = a.cves.slice(0, 6).concat(tags);
+      if ((a.stack || []).length) detail.appendChild(el('div', { class: 'tags' }, [el('span', { class: 'stack-tag', text: 'Our stack: ' + a.stack.join(', ') })]));
       if (tags.length) detail.appendChild(el('div', { class: 'tags' }, tags.map(function (t) { return el('span', { class: 'tag', text: t }); })));
       var todo = todoBox(a);
       if (todo) detail.appendChild(todo);
@@ -644,6 +689,7 @@ var BOOT = (function () {
 
     function render() {
       renderControls();
+      renderNotice();
       var f = state.f;
       var list = state.alerts.filter(function (a) { return passes(a); });
       if (f.sort === 'serious') {
@@ -664,8 +710,13 @@ var BOOT = (function () {
           return;
         }
         var elsewhere = f.view !== 'all' && state.alerts.filter(function (a) { return passes(a, 'view'); }).length;
+        var outside = f.scope === 'ours' && state.hasStack && state.alerts.filter(function (a) { return passes(a, 'scope'); }).length;
         var msg = el('p', { class: 'empty', text: 'No alerts match these filters. ' });
-        if (elsewhere) {
+        if (outside) {
+          var all = el('button', { type: 'button', class: 'linkish', text: 'Show ' + outside + ' in All updates' });
+          all.addEventListener('click', function () { update({ scope: 'all' }); });
+          msg.appendChild(all);
+        } else if (elsewhere) {
           var go = el('button', { type: 'button', class: 'linkish', text: 'Show ' + elsewhere + ' match' + (elsewhere === 1 ? '' : 'es') + ' in All' });
           go.addEventListener('click', function () { update({ view: 'all' }); });
           msg.appendChild(go);
@@ -689,16 +740,17 @@ var BOOT = (function () {
 
     function renderNotice() {
       notice.innerHTML = '';
-      var top = state.alerts.filter(function (a) { return a.exploited; })[0];
+      var ours = state.f.scope === 'ours' && state.hasStack;
+      var top = inScope().filter(function (a) { return a.exploited; })[0];
       if (!top) {
         notice.className = 'notice calm';
-        notice.appendChild(el('p', { class: 'notice-kicker', text: 'No exploited vulnerabilities in the last 30 days' }));
+        notice.appendChild(el('p', { class: 'notice-kicker', text: 'No exploited vulnerabilities ' + (ours ? 'in our stack ' : '') + 'in the last 30 days' }));
         notice.appendChild(el('h1', { text: state.alerts.length ? 'Nothing is being actively attacked right now.' : 'Waiting for the first alerts.' }));
         return;
       }
       var d = when(top);
       notice.className = 'notice';
-      notice.appendChild(el('p', { class: 'notice-kicker', text: 'Latest actively exploited vulnerability · ' + ago(d) }));
+      notice.appendChild(el('p', { class: 'notice-kicker', text: 'Latest actively exploited vulnerability' + (ours ? ' in our stack' : '') + ' · ' + ago(d) }));
       notice.appendChild(el('h1', {}, [link(top.title, top.url)]));
       notice.appendChild(el('div', { class: 'meta', text: top.source + ((top.cves || []).length ? ' · ' + top.cves.join(', ') : '') +
         (top.technologies.length ? ' · ' + top.technologies.join(', ') : '') }));
@@ -766,12 +818,14 @@ var BOOT = (function () {
 
     call('getPortalData').then(function (data) {
       state.alerts = (data.alerts || []).map(function (a) {
-        a.technologies = a.technologies || []; a.threat_types = a.threat_types || []; return a;
+        a.technologies = a.technologies || []; a.threat_types = a.threat_types || []; a.stack = a.stack || []; return a;
       });
+      state.total = data.total;
+      state.stackNames = (data.topics && data.topics.stack) || [];
+      // The switch appears once the monitor has tagged alerts with our stack (its next run after this update).
+      state.hasStack = state.stackNames.length > 0 && state.alerts.some(function (a) { return a.stack.length; });
       buildFilterOptions(data.topics);
       readChoices = buildChoices(form.querySelector('[data-choices]'), data.topics, [], 'both');
-      renderNotice();
-      renderSummary();
       render();
     }).catch(function (err) {
       notice.innerHTML = '';
