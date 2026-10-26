@@ -462,15 +462,15 @@ var BOOT = (function () {
   function needsAction(a) { return a.exploited || a.priority === 'urgent' || a.severity === 'critical' || a.severity === 'high'; }
   var SEV_RANK = { exploited: 4, critical: 3, high: 2, other: 1 };
   var VIEWS = [
+    { id: 'all', label: 'All', test: function () { return true; } },
     { id: 'action', label: 'Needs action', test: needsAction },
     { id: 'vuln', label: 'Vulnerabilities', test: function (a) { return kindOf(a) === 'vuln'; } },
     { id: 'adv', label: 'Advisories', test: function (a) { return kindOf(a) === 'adv'; } },
-    { id: 'news', label: 'News', test: function (a) { return kindOf(a) === 'news'; } },
-    { id: 'all', label: 'All', test: function () { return true; } }
+    { id: 'news', label: 'News', test: function (a) { return kindOf(a) === 'news'; } }
   ];
   var SEVS = [['exploited', 'Exploited'], ['critical', 'Critical'], ['high', 'High'], ['other', 'Other']];
   var PAGE = 50;
-  var DEFAULTS = { view: 'action', sev: [], tech: [], threat: [], src: '', days: '', sort: 'new', q: '' };
+  var DEFAULTS = { view: 'all', sev: [], tech: [], threat: [], src: '', days: '', sort: 'new', q: '' };
 
   // Filters live in the page address (?view=vuln&tech=Linux…) so a view can be bookmarked or shared;
   // the browser also remembers the last one used.
@@ -484,7 +484,7 @@ var BOOT = (function () {
         f[k] = Array.isArray(DEFAULTS[k]) ? params.get(k).split(',').filter(String) : params.get(k);
       });
     } else {
-      try { var saved = JSON.parse(localStorage.getItem('alertFilters') || 'null'); if (saved) Object.assign(f, saved); } catch (e) {}
+      try { var saved = JSON.parse(localStorage.getItem('alertFilters2') || 'null'); if (saved) Object.assign(f, saved); } catch (e) {}
     }
     if (!VIEWS.some(function (v) { return v.id === f.view; })) f.view = DEFAULTS.view;
     return f;
@@ -497,7 +497,7 @@ var BOOT = (function () {
     });
     var qs = params.toString();
     try { history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash); } catch (e) {}
-    try { localStorage.setItem('alertFilters', JSON.stringify(f)); } catch (e) {}
+    try { localStorage.setItem('alertFilters2', JSON.stringify(f)); } catch (e) {}
   }
 
   // ------------------------------------------------------------ home page
