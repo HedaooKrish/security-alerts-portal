@@ -215,6 +215,8 @@
   .status.ok { color: #15803d; }
   .status.err { color: var(--exploited); }
   @media (prefers-color-scheme: dark) { .status.ok { color: #86efac; } }
+  .full-note { margin: 14px 0 0; padding: 12px 14px; border-radius: var(--radius); background: var(--tint-action);
+               font-size: 15px; font-weight: 600; }
   .hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 
   /* confirm & manage pages */
@@ -844,12 +846,18 @@ var BOOT = (function () {
       btn.disabled = true; btn.textContent = 'Subscribing…';
       call('subscribe', { email: email, topics: c.topics, frequency: c.frequency, website: form.website.value })
         .then(function (res) {
+          if (res.full) return showFull();
           setStatus(status, res.ok, res.message);
           if (res.ok) form.email.value = '';
         })
         .catch(function (err) { setStatus(status, false, errorText(err)); })
         .then(function () { btn.disabled = false; btn.textContent = 'Subscribe'; });
     });
+
+    // All places taken: the sign-up form is replaced by one line.
+    function showFull() {
+      form.replaceWith(el('p', { class: 'full-note', role: 'status', text: 'Please contact the admin.' }));
+    }
 
     call('getPortalData').then(function (data) {
       state.alerts = (data.alerts || []).map(function (a) {
@@ -861,6 +869,7 @@ var BOOT = (function () {
       state.hasStack = state.stackNames.length > 0 && state.alerts.some(function (a) { return a.stack.length; });
       buildFilterOptions(data.topics);
       readChoices = buildChoices(form.querySelector('[data-choices]'), data.topics, [], 'both');
+      if (data.full) showFull();
       render();
     }).catch(function (err) {
       notice.innerHTML = '';
