@@ -64,6 +64,7 @@
   .notice { margin: 28px 0 8px; border-left: 8px solid var(--exploited); background: var(--surface);
             padding: 20px 24px; border-radius: 0 var(--radius) var(--radius) 0; }
   .notice.calm { border-left-color: var(--info); }
+  .notice[hidden] { display: none; }
   .notice-kicker { color: var(--exploited); font-weight: 600; font-size: 15px; margin: 0 0 6px; }
   .notice.calm .notice-kicker { color: var(--info); }
   .notice h1 { font-size: clamp(24px, 3.2vw, 36px); line-height: 1.15; font-weight: 800; letter-spacing: -0.02em;
@@ -777,6 +778,8 @@ var BOOT = (function () {
     function renderNotice() {
       notice.innerHTML = '';
       var ours = state.f.scope === 'ours' && state.hasStack;
+      notice.hidden = ours;            // the banner is only shown in "All updates"
+      if (ours) return;
       var top = inScope().filter(function (a) { return a.exploited; })[0];
       if (!top) {
         // Say only what the sources show: none *reported* (not "nothing is being attacked").
@@ -786,12 +789,6 @@ var BOOT = (function () {
           : 'No exploited vulnerabilities reported' + (ours ? ' in our stack.' : '.') }));
         notice.appendChild(el('div', { class: 'meta', text: 'Based on CISA\'s Known Exploited Vulnerabilities list and security news. ' +
           'Check the critical alerts below and keep systems patched.' }));
-        var elsewhere = ours && state.alerts.filter(function (a) { return a.exploited; }).length;
-        if (elsewhere) {
-          var see = el('button', { type: 'button', class: 'linkish', text: elsewhere + ' exploited in products outside our stack: view in All updates' });
-          see.addEventListener('click', function () { update({ scope: 'all', sev: ['exploited'] }); });
-          notice.appendChild(el('p', { class: 'meta' }, [see]));
-        }
         return;
       }
       var d = when(top);
