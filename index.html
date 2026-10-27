@@ -779,9 +779,19 @@ var BOOT = (function () {
       var ours = state.f.scope === 'ours' && state.hasStack;
       var top = inScope().filter(function (a) { return a.exploited; })[0];
       if (!top) {
+        // Say only what the sources show: none *reported* (not "nothing is being attacked").
         notice.className = 'notice calm';
-        notice.appendChild(el('p', { class: 'notice-kicker', text: 'No exploited vulnerabilities ' + (ours ? 'in our stack ' : '') + 'in the last 30 days' }));
-        notice.appendChild(el('h1', { text: state.alerts.length ? 'Nothing is being actively attacked right now.' : 'Waiting for the first alerts.' }));
+        notice.appendChild(el('p', { class: 'notice-kicker', text: 'Last 30 days' }));
+        notice.appendChild(el('h1', { text: !state.alerts.length ? 'Waiting for the first alerts.'
+          : 'No exploited vulnerabilities reported' + (ours ? ' in our stack.' : '.') }));
+        notice.appendChild(el('div', { class: 'meta', text: 'Based on CISA\'s Known Exploited Vulnerabilities list and security news. ' +
+          'Check the critical alerts below and keep systems patched.' }));
+        var elsewhere = ours && state.alerts.filter(function (a) { return a.exploited; }).length;
+        if (elsewhere) {
+          var see = el('button', { type: 'button', class: 'linkish', text: elsewhere + ' exploited in products outside our stack: view in All updates' });
+          see.addEventListener('click', function () { update({ scope: 'all', sev: ['exploited'] }); });
+          notice.appendChild(el('p', { class: 'meta' }, [see]));
+        }
         return;
       }
       var d = when(top);
