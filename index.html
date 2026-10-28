@@ -205,7 +205,9 @@
   .sev.high { color: var(--high); }
   .sev.info { color: var(--info); }
   .item .title { font-weight: 600; font-size: 15px; line-height: 1.35; text-decoration: none; min-width: 0;
-                 overflow-wrap: anywhere; }     /* full title, wrapping onto more lines when needed */
+                 overflow-wrap: anywhere; overflow: hidden;
+                 display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+                 /* up to two full lines, then "…" (hover shows the whole title) */
   .item .title:hover { text-decoration: underline; }
   .item .src { color: var(--muted); font-size: 13px; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .more-btn { font: inherit; font-size: 13px; background: none; border: 1px solid var(--line); border-radius: var(--radius);
@@ -490,6 +492,16 @@ var BOOT = (function () {
     if (a.severity === 'high') return { cls: 'high', text: 'High' + s };
     return { cls: 'info', text: a.priority === 'urgent' ? 'Urgent' : 'News & advisories' };
   }
+  // NVD titles are cut at 140 characters ("CVE-…: description…"); the stored summary has the longer text.
+  function fullTitle(a) {
+    var t = a.title || '';
+    if (!/(…|\.\.\.)$/.test(t) || !a.summary) return t;
+    var head = t.replace(/(…|\.\.\.)$/, '');
+    var colon = head.indexOf(': ');
+    var prefix = colon > 0 && /^(CVE|GHSA)-/i.test(head) ? head.slice(0, colon + 2) : '';
+    var body = head.slice(prefix.length);
+    return a.summary.indexOf(body.slice(0, 40)) === 0 ? prefix + a.summary : t;
+  }
   function todoBox(a) {
     if (!a.action && !(a.remediation || []).length) return null;
     var box = el('div', { class: 'todo' }, [el('strong', { text: 'What to do: ' }), a.action || '']);
@@ -728,7 +740,8 @@ var BOOT = (function () {
       var d = when(a), sev = sevInfo(a), id = a.id || a.url;
       var main = (a.stack || [])[0] || a.technologies[0] || a.threat_types.filter(function (t) { return t !== 'Actively exploited'; })[0] || '';
       var meta = [a.source, main, (a.cves || []).slice(0, 2).join(', ')].filter(String).join(' · ');
-      var title = link(a.title, a.url, 'title'); title.title = a.title;
+      var full = fullTitle(a);
+      var title = link(full, a.url, 'title'); title.title = full;
       var btn = el('button', { type: 'button', class: 'more-btn', 'aria-expanded': String(!!state.open[id]), text: state.open[id] ? 'Less' : 'Details' });
       var detail = el('div', { class: 'detail' });
       detail.hidden = !state.open[id];
